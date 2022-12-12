@@ -1,0 +1,129 @@
+#include <iostream>
+#include <fstream>
+#include <openssl/rsa.h>
+#include <openssl/pem.h>
+#include <openssl/ssl.h>
+#include <openssl/evp.h>
+#include <openssl/bio.h>
+#include <openssl/err.h>
+#include <openssl/sha.h>
+#include <openssl/x509.h>
+#include <sstream>
+#include <iomanip>
+#include <stdio.h>
+
+using namespace std;
+
+void getHashedValue(unsigned char *hash)
+{
+    ifstream file("ignis-10M.txt");
+    if (!file.is_open())
+    {
+        // Handle error
+        cout << "if (!file.is_open())";
+        // return NULL;
+    }
+
+    // Initialize the context for the hash computation
+    EVP_MD_CTX *ctx = EVP_MD_CTX_create();
+    if (ctx == NULL)
+    {
+        // Handle error
+        cout << "if (ctx == NULL)\n";
+        // return NULL;
+    }
+
+    // Initialize the hash computation
+    if (EVP_DigestInit(ctx, EVP_sha256()) != 1)
+    {
+        // Handle error
+        cout << "if (EVP_DigestInit(ctx, EVP_sha256()) != 1)\n";
+        // return NULL;
+    }
+
+    // Compute the hash of the file
+    char buffer[1024];
+    while (file.good())
+    {
+        file.read(buffer, sizeof(buffer));
+        if (file.gcount() > 0)
+        {
+            if (EVP_DigestUpdate(ctx, buffer, file.gcount()) != 1)
+            {
+                // Handle error
+                cout << "if (EVP_DigestUpdate(ctx, buffer, file.gcount()) != 1)\n";
+                // return NULL;
+            }
+        }
+    }
+
+    // Get the final hash value
+    unsigned int hash_len;
+    if (EVP_DigestFinal(ctx, hash, &hash_len) != 1)
+    {
+        // Handle error
+        cout << "if (EVP_DigestFinal(ctx, hash, &hash_len) != 1)\n";
+        // return NULL;
+    }
+
+    // Clean up
+    EVP_MD_CTX_destroy(ctx);
+}
+
+int main()
+{
+    unsigned char sha256value[SHA256_DIGEST_LENGTH];
+    getHashedValue(sha256value);
+
+    if (sha256value != NULL)
+    {
+        cout << "SHA256 for file: ";
+
+        for (int i = 0; i < SHA256_DIGEST_LENGTH; i++)
+        {
+            cout << hex << (int)sha256value[i] << " ";
+        }
+        cout << "\n";
+    }
+    else
+    {
+        // Error Handleing
+        cout << "Error occured, check the file input \n";
+    }
+
+    ///////////////////////////////////////////////////////////////
+
+    // Decrypt signature
+    FILE *signatureFile = NULL;
+    signatureFile = fopen("RSASign.sig", "rb");
+
+    //Read the key from file
+    FILE *pubKeyFile;
+    RSA *rsa = RSA_new();
+    pubKeyFile = fopen("pubKeySender.pem", "r");
+    rsa = PEM_read_RSAPublicKey(pubKeyFile, NULL, NULL, NULL);
+    fclose(pubKeyFile);
+
+    unsigned char sigBuffer[RSA_size(rsa)];
+    fread(sigBuffer, RSA_size(rsa), 1, signatureFile);
+
+    unsigned char signatureContent[32];
+    RSA_public_decrypt(RSA_size(rsa), sigBuffer, signatureContent, rsa, RSA_PKCS1_PADDING);
+    fclose(signatureFile);
+
+    // Print decrypted message
+    cout << "Decrypted signature message: ";
+    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++)
+        printf("%2X ", signatureContent[i]);
+    cout << endl;
+
+    // Compare the two values, if they are the same, then the signature is valid
+    if (memcmp(signatureContent, sha256value, SHA256_DIGEST_LENGTH) == 0)
+        cout << "\nValid signature\n";
+    else
+        cout << "\nInvalid signature\n";
+
+    RSA_free(rsa);
+
+    return 0;
+}

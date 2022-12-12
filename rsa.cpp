@@ -129,6 +129,7 @@ int main()
         printLastError("Private Encrypt failed");
         exit(0);
     }
+    printf("Encrypted Text =%s\n", encrypted);
     printf("Encrypted length =%d\n", encrypted_length);
 
     int decrypted_length = public_decrypt(encrypted, encrypted_length, publicKey, decrypted);
